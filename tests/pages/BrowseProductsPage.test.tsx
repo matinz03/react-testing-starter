@@ -4,19 +4,19 @@ import {
   waitForElementToBeRemoved,
 } from "@testing-library/react";
 
-import { Theme } from "@radix-ui/themes";
-import BrowseProducts from "../../src/pages/BrowseProductsPage";
-import { Category, Product } from "../../src/entities";
-import { db, getProductsByCategory } from "../mocks/db";
 import userEvent from "@testing-library/user-event";
-import { CartProvider } from "../../src/providers/CartProvider";
+import { Category, Product } from "../../src/entities";
+import BrowseProducts from "../../src/pages/BrowseProductsPage";
+import { AllProviders } from "../AllProviders";
+import { db, getProductsByCategory } from "../mocks/db";
 import { simulateDelay, simulateError } from "../utils";
 describe("BrowseProductsPage", () => {
   const categories: Category[] = [];
   const products: Product[] = [];
   beforeAll(() => {
-    [1, 2].forEach(() => {
+    [1, 2].forEach((index) => {
       const category = db.category.create();
+      category.name = category.name + index;
       categories.push(category);
       [1, 2].forEach(() => {
         products.push(db.product.create({ categoryId: category.id }));
@@ -98,11 +98,9 @@ describe("BrowseProductsPage", () => {
 });
 const renderComponent = () => {
   render(
-    <CartProvider>
-      <Theme>
-        <BrowseProducts />
-      </Theme>
-    </CartProvider>
+    <BrowseProducts />,
+
+    { wrapper: AllProviders }
   );
 
   const getSkeleton = (option: string) =>
