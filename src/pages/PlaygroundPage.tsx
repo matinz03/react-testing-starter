@@ -1,9 +1,9 @@
 // import Onboarding from "../components/Onboarding";
 
-import ExpandableText from "../components/ExpandableText";
+import ProductForm from "../components/ProductForm";
 
 const PlaygroundPage = () => {
-  return <ExpandableText text="short text" />;
+  return <ProductForm />;
 };
 
 export default PlaygroundPage;
