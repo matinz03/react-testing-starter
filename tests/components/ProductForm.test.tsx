@@ -5,12 +5,80 @@ import {
   waitForElementToBeRemoved,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Toaster } from "react-hot-toast";
 import ProductForm from "../../src/components/ProductForm";
 import { Category, Product } from "../../src/entities";
 import { AllProviders } from "../AllProviders";
 import { db } from "../mocks/db";
+
 describe("ProductForm", () => {
   let category: Category;
+  const renderComponent = (product?: Product) => {
+    const onSubmit = vi.fn();
+    render(
+      <>
+        <Toaster />
+        <ProductForm onSubmit={onSubmit} product={product} />
+      </>,
+
+      {
+        wrapper: AllProviders,
+      }
+    );
+    type FormData = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      [K in keyof Product]: any;
+    };
+    const validData: FormData = {
+      id: 1,
+      name: "a",
+      price: 1,
+      categoryId: category.id,
+    };
+
+    const getName = () => {
+      return screen.getByPlaceholderText(/name/i);
+    };
+    const getPrice = () => {
+      return screen.getByPlaceholderText(/price/i);
+    };
+    const getCombo = () => {
+      return screen.getByRole("combobox", { name: /category/i });
+    };
+    const getSubmit = () => {
+      return screen.getByRole("button");
+    };
+
+    const expectErrorToBeInTheDocument = (errorMessage: RegExp) => {
+      const error = screen.getByRole("alert");
+      expect(error).toBeInTheDocument();
+      expect(error).toHaveTextContent(errorMessage);
+    };
+    const loaded = async () => {
+      await waitForElementToBeRemoved(() => screen.getByText(/loading/i));
+      const inputName = getName();
+      const inputPrice = getPrice();
+      const combo = getCombo();
+      const submit = getSubmit();
+      const fill = async (product: FormData) => {
+        const user = userEvent.setup();
+        if (product.name !== undefined)
+          await user.type(inputName, product.name);
+        if (product.price !== undefined)
+          await user.type(inputPrice, String(product.price));
+        await user.tab();
+        await user.click(combo);
+
+        const options = screen.getAllByRole("option");
+
+        await user.click(options[0]);
+
+        await user.click(submit);
+      };
+      return { inputName, inputPrice, combo, submit, fill, validData };
+    };
+    return { loaded, expectErrorToBeInTheDocument, onSubmit };
+  };
   beforeAll(() => {
     category = db.category.create();
   });
@@ -57,12 +125,12 @@ describe("ProductForm", () => {
     {
       scenario: "is less than 1",
       errorMessage: /greater/i,
-      price: "-2",
+      price: -2,
     },
     {
       scenario: "is more than 1000",
       errorMessage: /less/i,
-      price: "1002",
+      price: 1002,
     },
     {
       scenario: "is a character",
@@ -78,62 +146,42 @@ describe("ProductForm", () => {
       expectErrorToBeInTheDocument(errorMessage);
     }
   );
-});
-
-const renderComponent = (product?: Product) => {
-  render(<ProductForm onSubmit={vi.fn()} product={product} />, {
-    wrapper: AllProviders,
+  it("should validate the submitted formData", async () => {
+    const { loaded, onSubmit } = renderComponent();
+    const { fill, validData } = await loaded();
+    await fill(validData);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unused-vars
+    const { id, ...formData } = validData;
+    expect(onSubmit).toHaveBeenCalledWith(formData);
   });
-  type FormData = {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    [K in keyof Product]: any;
-  };
-  const validData: FormData = {
-    id: 1,
-    name: "a",
-    price: "1",
-    categoryId: 1,
-  };
-
-  const getName = () => {
-    return screen.getByPlaceholderText(/name/i);
-  };
-  const getPrice = () => {
-    return screen.getByPlaceholderText(/price/i);
-  };
-  const getCombo = () => {
-    return screen.getByRole("combobox", { name: /category/i });
-  };
-  const getSubmit = () => {
-    return screen.getByRole("button");
-  };
-
-  const expectErrorToBeInTheDocument = (errorMessage: RegExp) => {
-    const error = screen.getByRole("alert");
-    expect(error).toBeInTheDocument();
-    expect(error).toHaveTextContent(errorMessage);
-  };
-  const loaded = async () => {
-    await waitForElementToBeRemoved(() => screen.getByText(/loading/i));
-    const inputName = getName();
-    const inputPrice = getPrice();
-    const combo = getCombo();
-    const submit = getSubmit();
-    const fill = async (product: FormData) => {
-      const user = userEvent.setup();
-      if (product.name !== undefined) await user.type(inputName, product.name);
-      if (product.price !== undefined)
-        await user.type(inputPrice, product.price);
-      await user.tab();
-      await user.click(combo);
-
-      const options = screen.getAllByRole("option");
-
-      await user.click(options[0]);
-
-      await user.click(submit);
-    };
-    return { inputName, inputPrice, combo, submit, fill, validData };
-  };
-  return { loaded, expectErrorToBeInTheDocument };
-};
+  it("should render a toast error when submit fails", async () => {
+    const { loaded, onSubmit } = renderComponent();
+    onSubmit.mockRejectedValue({});
+    const { fill, validData } = await loaded();
+    await fill(validData);
+    const toast = await screen.findByRole("status");
+    expect(toast).toBeInTheDocument();
+    expect(toast).toHaveTextContent(/error/i);
+  });
+  it("should disable the submit button when submitting", async () => {
+    const { loaded, onSubmit } = renderComponent();
+    onSubmit.mockReturnValue(new Promise(() => {}));
+    const { fill, validData, submit } = await loaded();
+    await fill(validData);
+    expect(submit).toBeDisabled();
+  });
+  it("should re-enable the submit button when submitted", async () => {
+    const { loaded, onSubmit } = renderComponent();
+    onSubmit.mockResolvedValue({});
+    const { fill, validData, submit } = await loaded();
+    await fill(validData);
+    expect(submit).not.toBeDisabled();
+  });
+  it("should re-enable the submit button when submit failed", async () => {
+    const { loaded, onSubmit } = renderComponent();
+    onSubmit.mockRejectedValue({});
+    const { fill, validData, submit } = await loaded();
+    await fill(validData);
+    expect(submit).not.toBeDisabled();
+  });
+});
